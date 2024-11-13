@@ -1,13 +1,17 @@
 extends layout
 
 block content
+  if messages
+    != messages()
   h1 Login
   form(method='POST', action='/users/login')
-    #form-group
-      label Username:
-      input.form-control(name='username',type='text')
-    #form-group
-      label Password:
-      input.form-control(name='password',type='password')
+    .form-group
+      label(for='username') Benutzername:
+      input.form-control(name='username', type='text', id='username', required=true)
+    .form-group
+      label(for='password') Passwort:
+      input.form-control(name='password', type='password', id='password', required=true)
     br
-    input.btn.btn-primary(type='submit',value='Submit')
+    input.btn.btn-primary(type='submit', value='Einloggen')
+  br
+  a.btn.btn-danger(href='/users/google') Mit Google anmelden

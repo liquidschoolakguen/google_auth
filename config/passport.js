@@ -1,38 +1,98 @@
+// config/passport.js
 const LocalStrategy = require('passport-local').Strategy;
-const User = require('../models/user');
-const config = require('../config/database');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const User = require('../models/user');
 
-module.exports = function(passport){
-  // Local Strategy
-  passport.use(new LocalStrategy(function(username, password, done){
-    // Match Username
-    let query = {username:username};
-    User.findOne(query, function(err, user){
-      if(err) throw err;
-      if(!user){
-        return done(null, false, {message: 'No user found'});
-      }
+module.exports = function(passport) {
 
-      // Match Password
-      bcrypt.compare(password, user.password, function(err, isMatch){
-        if(err) throw err;
-        if(isMatch){
+  // Lokale Strategie
+  passport.use(new LocalStrategy(
+    async function(username, password, done) {
+      try {
+        // Suche nach dem Benutzer
+        const user = await User.findOne({ username: username });
+
+        if (!user) {
+          return done(null, false, { message: 'Falscher Benutzername' });
+        }
+
+        // Passwort vergleichen, nur wenn Passwort vorhanden ist
+        if (!user.password) {
+          return done(null, false, { message: 'Passwort nicht gesetzt. Bitte melde dich über Google an.' });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if (isMatch) {
           return done(null, user);
         } else {
-          return done(null, false, {message: 'Wrong password'});
+          return done(null, false, { message: 'Falsches Passwort' });
         }
-      });
-    });
-  }));
 
-  passport.serializeUser(function(user, done) {
+      } catch (err) {
+        return done(err);
+      }
+    }
+  ));
+
+  // Google Strategie
+  passport.use(new GoogleStrategy({
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.CALLBACK_URL
+    },
+    async function(accessToken, refreshToken, profile, done) {
+      try {
+        // Suche nach dem Benutzer anhand der Google ID
+        let user = await User.findOne({ googleId: profile.id });
+
+        if (user) {
+          // Benutzer existiert bereits
+          return done(null, user);
+        } else {
+          // Suche nach Benutzer anhand der E-Mail, falls vorhanden
+          const existingUser = await User.findOne({ email: profile.emails[0].value });
+
+          if (existingUser) {
+            // Verbinde Google ID mit bestehendem Benutzer
+            existingUser.googleId = profile.id;
+            existingUser.avatar = profile.photos[0].value;
+            await existingUser.save();
+            return done(null, existingUser);
+          } else {
+            // Neuen Benutzer erstellen
+            const newUser = new User({
+              name: profile.displayName,
+              username: profile.displayName.replace(/\s+/g, '').toLowerCase(),
+              googleId: profile.id,
+              email: profile.emails[0].value,
+              avatar: profile.photos[0].value
+            });
+
+            await newUser.save();
+            return done(null, newUser);
+          }
+        }
+      } catch (err) {
+        return done(err, false);
+      }
+    }
+  ));
+
+  // Benutzer serialisieren
+  passport.serializeUser((user, done) => {
     done(null, user.id);
   });
 
-  passport.deserializeUser(function(id, done) {
-    User.findById(id, function(err, user) {
-      done(err, user);
-    });
+  // Benutzer deserialisieren
+  passport.deserializeUser(async (id, done) => {
+    try {
+      const user = await User.findById(id);
+      done(null, user);
+    } catch(err) {
+      done(err);
+    }
   });
-}
+};

@@ -1,23 +1,37 @@
+// models/user.js
 const mongoose = require('mongoose');
 
-// User Schema
-const UserSchema = mongoose.Schema({
-  name:{
-    type: String,
-    required: true
+const UserSchema = new mongoose.Schema({
+  name: {
+    type: String
+    // Optional, falls der Benutzer sich über Google anmeldet
   },
-  email:{
+  username: {
     type: String,
-    required: true
+    required: true,
+    unique: true
   },
-  username:{
+  email: {
     type: String,
-    required: true
+    required: true,
+    unique: true
   },
-  password:{
+  password: {
+    type: String
+    // Optional, falls der Benutzer sich nur über Google anmeldet
+  },
+  googleId: {
     type: String,
-    required: true
+    unique: true,
+    sparse: true
+  },
+  avatar: {
+    type: String
+  },
+  date: {
+    type: Date,
+    default: Date.now
   }
 });
 
-const User = module.exports = mongoose.model('User', UserSchema);
+module.exports = mongoose.model('User', UserSchema);

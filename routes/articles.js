@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { check, validationResult } = require('express-validator');
 
 // Article Model
 let Article = require('../models/article');
@@ -14,103 +15,112 @@ router.get('/add', ensureAuthenticated, function(req, res){
 });
 
 // Add Submit POST Route
-router.post('/add', function(req, res){
-  req.checkBody('title','Title is required').notEmpty();
-  //req.checkBody('author','Author is required').notEmpty();
-  req.checkBody('body','Body is required').notEmpty();
-
+router.post('/add', [
+  // Validierung
+  check('title', 'Title is required').notEmpty(),
+  check('body', 'Body is required').notEmpty()
+], async function(req, res){
   // Get Errors
-  let errors = req.validationErrors();
+  const errors = validationResult(req);
 
-  if(errors){
+  if(!errors.isEmpty()){
     res.render('add_article', {
       title:'Add Article',
-      errors:errors
+      errors: errors.array()
     });
   } else {
-    let article = new Article();
-    article.title = req.body.title;
-    article.author = req.user._id;
-    article.body = req.body.body;
+    try {
+      let article = new Article({
+        title: req.body.title,
+        author: req.user._id,
+        author_name: req.user.name,
+        body: req.body.body
+      });
 
-    article.save(function(err){
-      if(err){
-        console.log(err);
-        return;
-      } else {
-        req.flash('success','Article Added');
-        res.redirect('/');
-      }
-    });
+      await article.save();
+      req.flash('success','Article Added');
+      res.redirect('/');
+    } catch(err) {
+      console.log(err);
+      req.flash('error', 'Error saving article');
+      res.redirect('/articles/add');
+    }
   }
 });
 
 // Load Edit Form
-router.get('/edit/:id', ensureAuthenticated, function(req, res){
-  Article.findById(req.params.id, function(err, article){
+router.get('/edit/:id', ensureAuthenticated, async function(req, res){
+  try {
+    const article = await Article.findById(req.params.id);
     if(article.author != req.user._id){
       req.flash('danger', 'Not Authorized');
-      return res.redirect('/');
+      res.redirect('/');
+    } else {
+      res.render('edit_article', {
+        title:'Edit Article',
+        article:article
+      });
     }
-    res.render('edit_article', {
-      title:'Edit Article',
-      article:article
-    });
-  });
+  } catch(err) {
+    console.log(err);
+    res.redirect('/');
+  }
 });
 
 // Update Submit POST Route
-router.post('/edit/:id', function(req, res){
-  let article = {};
-  article.title = req.body.title;
-  article.author = req.body.author;
-  article.body = req.body.body;
+router.post('/edit/:id', async function(req, res){
+  try {
+    const article = {
+      title: req.body.title,
+      author: req.user._id,
+      body: req.body.body
+    };
 
-  let query = {_id:req.params.id}
-
-  Article.update(query, article, function(err){
-    if(err){
-      console.log(err);
-      return;
-    } else {
-      req.flash('success', 'Article Updated');
-      res.redirect('/');
-    }
-  });
+    const query = {_id:req.params.id};
+    await Article.updateOne(query, article);
+    req.flash('success', 'Article Updated');
+    res.redirect('/');
+  } catch(err) {
+    console.log(err);
+    return;
+  }
 });
 
 // Delete Article
-router.delete('/:id', function(req, res){
+router.delete('/:id', async function(req, res){
   if(!req.user._id){
     res.status(500).send();
+    return;
   }
 
-  let query = {_id:req.params.id}
-
-  Article.findById(req.params.id, function(err, article){
+  try {
+    const article = await Article.findById(req.params.id);
     if(article.author != req.user._id){
       res.status(500).send();
-    } else {
-      Article.remove(query, function(err){
-        if(err){
-          console.log(err);
-        }
-        res.send('Success');
-      });
+      return;
     }
-  });
+
+    await Article.deleteOne({_id: req.params.id});
+    res.send('Success');
+  } catch(err) {
+    console.log(err);
+    res.status(500).send();
+  }
 });
 
 // Get Single Article
-router.get('/:id', function(req, res){
-  Article.findById(req.params.id, function(err, article){
-    User.findById(article.author, function(err, user){
-      res.render('article', {
-        article:article,
-        author: user.name
-      });
+router.get('/:id', async function(req, res){
+  try {
+    const article = await Article.findById(req.params.id);
+    const user = await User.findById(article.author);
+    res.render('article', {
+      article: article,
+      author: user.name
     });
-  });
+  } catch(err) {
+    console.log(err);
+    res.redirect('/');
+  }
 });
 
 // Access Control

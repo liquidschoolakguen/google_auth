@@ -81,7 +81,7 @@ router.get('/google',
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
-// Google Callback
+// Google Callbackn ff
 router.get('/google/callback',
   passport.authenticate('google', { failureRedirect: '/users/login', failureFlash: true }),
   (req, res) => {
